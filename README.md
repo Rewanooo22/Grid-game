@@ -1,209 +1,147 @@
-# Reinforcement Learning in GridWorld
+# GridWorld RL Algorithms
 
-A custom Reinforcement Learning project that implements and compares three fundamental RL approaches in an 8×8 GridWorld environment:
+Three tabular reinforcement learning algorithms implemented from scratch with NumPy and compared on the same custom 8x8 GridWorld:
 
-* Value Iteration
-* Q-Learning
-* REINFORCE Policy Gradient
+- **Value Iteration** (dynamic programming, uses the environment model)
+- **Q-Learning** (temporal-difference control, epsilon-greedy)
+- **REINFORCE** (Monte-Carlo policy gradient with a tabular softmax policy)
 
-The project was developed from scratch to explore how model-based, value-based, and policy-based reinforcement learning methods behave under the same environment and reward structure.
+A single script trains all three, writes comparison plots and a `results.csv` table. Pygame viewers can play back an episode or draw a learned policy as arrows.
 
-## Project Overview
+> **Note:** the source code is currently packaged as a zip archive, `game (2).zip`, which contains a `game/` folder. Extract it before running anything (see [Getting started](#getting-started)).
 
-The environment is a custom deterministic 8×8 GridWorld containing:
+## Environment
 
-* Static obstacles that block movement
-* Collectible items that increase the agent's reward
-* A dynamic moving obstacle that applies a large collision penalty
-* A terminal goal state
-* A step penalty that encourages shorter and more efficient paths
+Defined in `environment.py` as a deterministic, fully known MDP:
 
-The main objective is to evaluate different Reinforcement Learning paradigms on the same task and compare their convergence behavior, training speed, sample efficiency, and memory requirements.
+- 8x8 grid, start at `(0, 0)`, terminal goal at `(7, 7)`.
+- 10 static wall cells; moving into a wall or off the grid leaves the agent in place.
+- 3 collectibles at `(0, 7)`, `(4, 0)` and `(7, 3)`, each rewarded the first time it is reached.
+- 1 dynamic obstacle that patrols a fixed 4-cell loop along row 2 (columns 4 to 7), advancing one cell per step regardless of the agent's action.
+- Actions: up, down, left, right. Episodes end at the goal or after 200 steps.
 
-## State Representation
+| Event | Reward |
+|---|---:|
+| Each step | -1 |
+| Collectible (first visit) | +10 |
+| Landing on the obstacle's cell | -50 |
+| Reaching the goal | +100 |
 
-To preserve the Markov property, each state contains all the information required to describe the current environment:
+**State** = `(row, col, collected_mask, obstacle_phase)`. Including the collectible bitmask and the obstacle phase keeps the process Markovian. This gives 54 free cells x 8 masks x 4 phases = **1,728 states**, all enumerated by `GridWorld.enumerate_states()`. The model is exposed through `next_state_reward(s, a)`, with `transition_prob` and `reward_fn` wrappers for the explicit P/R form.
 
-```text
-State = (row, column, collected_mask, obstacle_phase)
-```
+## Algorithms
 
-The state space consists of:
+| | Value Iteration | Q-Learning | REINFORCE |
+|---|---|---|---|
+| File | `value_iteration.py` | `q_learning.py` | `reinforce.py` |
+| Type | Model-based DP | Model-free, off-policy TD | Model-free, Monte-Carlo policy gradient |
+| Representation | `V(s)` table | `Q(s, a)` table (1,728 x 4) | Preference table `theta(s, a)` (1,728 x 4), softmax policy |
+| Settings in `train_and_compare.py` | gamma 0.99, stop when max delta < 1e-6 | alpha 0.1, gamma 0.99, epsilon decayed linearly 1.0 to 0.05, 5,000 episodes | alpha 0.01, gamma 0.99, 20,000 episodes, running mean-return baseline |
 
-```text
-54 valid grid cells
-× 8 collectible combinations
-× 4 obstacle phases
-= 1,728 states
-```
+Q-Learning and REINFORCE use a fixed seed (0). All three return a plain `dict` mapping state to action, so any policy can be passed to the visualisation helpers.
 
-## Reward Function
+## Project structure
 
-The reward structure is designed to encourage successful and efficient navigation.
-
-| Event                      | Reward |
-| -------------------------- | -----: |
-| Reach Goal                 |   +100 |
-| Obtain Collectible         |    +10 |
-| Dynamic Obstacle Collision |    -50 |
-| Standard Step              |     -1 |
-
-The positive rewards encourage task completion and exploration, while collision and step penalties discourage unsafe behavior and unnecessarily long trajectories.
-
-## Implemented Algorithms
-
-### 1. Value Iteration
-
-A model-based Dynamic Programming approach using the Bellman Optimality Equation.
+Contents of `game (2).zip`:
 
 ```text
-V(s) = max_a Σ P(s' | s,a) [R + γV(s')]
+game/
+├── environment.py        # GridWorld MDP: layout, model, rewards, pygame rendering
+├── value_iteration.py    # Value Iteration + greedy policy extraction
+├── q_learning.py         # Tabular Q-Learning
+├── reinforce.py          # Tabular softmax REINFORCE
+├── visualize.py          # pygame playback / policy arrows, matplotlib plots
+├── train_and_compare.py  # trains all three, writes plots and results.csv
+├── requirements.txt      # numpy, matplotlib, pygame
+├── results.csv           # results of a previous run
+├── reward_comparison.png # plots from that run
+├── convergence.png
+├── steps_to_goal.png
+└── README.md
 ```
 
-Value Iteration assumes complete knowledge of the environment transition model and provides a mathematical baseline for the optimal policy in the deterministic GridWorld.
+The archive also contains a `.git/` folder with no commits and a `__pycache__/` folder; neither is needed to run the code.
 
-### 2. Q-Learning
+## Getting started
 
-A model-free Temporal Difference learning algorithm.
+### Prerequisites
 
-The agent maintains a Q-table containing an estimated value for every state-action pair and improves its behavior directly through interaction with the environment.
+- Python 3 (the archived bytecode was produced by Python 3.13)
+- A display, if you want to use the pygame viewers
 
-The implementation uses exploration with epsilon decay to gradually transition from exploration toward exploitation.
+### Installation
 
-### 3. REINFORCE
-
-A Monte Carlo Policy Gradient algorithm that directly optimizes a stochastic policy.
-
-The implementation:
-
-* Uses a Softmax policy for action selection
-* Collects complete trajectories
-* Computes cumulative returns
-* Updates policy parameters after each episode
-* Uses gradient ascent to maximize expected reward
-
-## Training Pipeline
-
-The general training workflow is:
-
-```text
-Initialize
-   ↓
-Interact with Environment
-   ↓
-Collect State / Reward / Termination Data
-   ↓
-Update Values or Policy
-   ↓
-Repeat Until Convergence
+```bash
+git clone https://github.com/Rewanooo22/gridworld-rl-algorithms.git
+cd gridworld-rl-algorithms
+unzip "game (2).zip"
+cd game
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-This common pipeline makes it possible to evaluate the algorithms consistently under the same environment conditions.
+On Windows without `unzip`, extract the archive with Explorer or `tar -xf "game (2).zip"`.
 
-## Project Structure
+### Train and compare
 
-```text
-.
-├── environment.py
-├── value_iteration.py
-├── q_learning.py
-├── reinforce.py
-├── visualize.py
-└── train_and_compare.py
+```bash
+python train_and_compare.py
 ```
 
-### `environment.py`
+This prints progress for each algorithm, prints the results table, and overwrites `results.csv`, `reward_comparison.png`, `convergence.png` and `steps_to_goal.png` in the current folder. The plots are rendered headlessly with matplotlib's Agg backend.
 
-Contains the main GridWorld mechanics, including:
+### Watch an agent or draw its policy
 
-* State transitions
-* Static obstacles
-* Moving obstacle behavior
-* Reward logic
-* Terminal states
+The pygame viewers open a window, so call them from a Python shell inside `game/`:
 
-### `value_iteration.py`
+```python
+from environment import GridWorld
+from value_iteration import value_iteration
+from visualize import play_episode, render_policy_arrows
 
-Implements the Dynamic Programming solver using full knowledge of the environment transition model.
+env = GridWorld()
+policy, V, log, t = value_iteration(env)
 
-### `q_learning.py`
-
-Implements the tabular Q-Learning agent with epsilon-decay exploration.
-
-### `reinforce.py`
-
-Implements the stochastic REINFORCE policy-gradient agent using Softmax action selection.
-
-### `visualize.py`
-
-Provides Pygame/Matplotlib visualization for observing the agent's navigation and behavior.
-
-### `train_and_compare.py`
-
-Runs the algorithms and generates unified evaluation metrics and comparison plots.
-
-## Experimental Comparison
-
-The three approaches show different strengths and weaknesses:
-
-| Metric            | Value Iteration               | Q-Learning            | REINFORCE                   |
-| ----------------- | ----------------------------- | --------------------- | --------------------------- |
-| Training Speed    | Fast                          | Medium                | Slow                        |
-| Convergence       | Strong deterministic baseline | Asymptotic            | Higher variance             |
-| Sample Efficiency | Model-based                   | High                  | Lower                       |
-| Memory            | Moderate                      | Higher due to Q-table | Low policy-weight footprint |
-
-For this discrete environment, Q-Learning provides a strong balance between computational efficiency, model-free learning, and final task performance. Value Iteration provides the optimal mathematical baseline, while REINFORCE demonstrates direct policy optimization but with higher variance and slower learning.
+play_episode(env, policy)                                   # animate one episode
+render_policy_arrows(env, policy, save_path="arrows.png")   # greedy action per cell for mask=0, phase=0
+```
 
 ## Results
 
-The training results show that Q-Learning steadily approaches the Value Iteration baseline, while REINFORCE improves more slowly and exhibits noticeably higher variance during training.
+From `results.csv` included in the archive (one run of `train_and_compare.py`):
 
-The comparison highlights the practical differences between value-based and policy-based learning methods when applied to a relatively small discrete state space.
+| Algorithm | final_avg_reward | steps_to_goal | training_time_sec | convergence_point |
+|---|---:|---:|---:|---:|
+| Value Iteration | 106.0 | 14 | 0.2161 | 16 |
+| Q-Learning | 105.17 | 14 | 3.1622 | 3890 |
+| REINFORCE | 82.88 | 27 | 27.5733 | 5275 |
 
-## Project Strengths
+How the columns are computed in `train_and_compare.py`:
 
-The project focuses on three main strengths:
+- `final_avg_reward`: for Value Iteration, the reward of one greedy rollout from the start state; for Q-Learning and REINFORCE, the mean reward of the last 100 *training* episodes (Q-Learning still explores with epsilon = 0.05 at the end).
+- `steps_to_goal`: steps taken by one greedy rollout of the final policy, for all three algorithms.
+- `training_time_sec`: wall-clock training time on the machine used for that run.
+- `convergence_point`: number of sweeps for Value Iteration; for the other two, the first episode at which the 100-episode moving-average reward comes within 5% of its final level.
 
-* Fair comparison using the same environment for all algorithms
-* Clean implementations developed without relying on black-box RL frameworks
-* Visualization tools for inspecting agent movement, path selection, and collision avoidance
+In that run, the greedy Q-Learning policy reached the goal in the same 14 steps as the Value Iteration policy, while the tabular REINFORCE policy needed 27 steps and had a lower average training reward. The plots in the archive (`reward_comparison.png`, `convergence.png`, `steps_to_goal.png`) come from the same run.
 
 ## Limitations
 
-Current limitations include:
+- Tabular methods only; the state space is small (1,728 states) and fully enumerable.
+- Deterministic transitions; there is no stochastic dynamics (e.g. slippery tiles).
+- Results come from a single seed and a single run; timings depend on hardware.
+- REINFORCE uses only a global running-mean baseline, not a state-dependent value function.
+- The code is shipped inside a zip archive rather than as files at the repository root.
 
-* Q-Learning relies on a discrete tabular state representation
-* The approach does not scale efficiently to extremely large state spaces
-* Deep Q-Networks were not implemented
-* Environment transitions are deterministic and do not currently include stochastic effects such as wind or slippery tiles
+## Future improvements (ideas)
 
-## Future Work
+- Unpack the source into the repository root and drop the archived `.git/` and `__pycache__/` folders.
+- Run multiple seeds and report means and spreads.
+- Add an actor-critic baseline or function approximation (e.g. DQN) and stochastic transitions.
 
-Possible extensions include:
+## Context and team
 
-* Deep Q-Networks (DQN)
-* Actor-Critic methods such as A2C
-* Proximal Policy Optimization (PPO)
-* Stochastic environment transitions
-* Larger or continuous state spaces
-* Multi-agent Reinforcement Learning
+Coursework for **Advanced Machine Learning** (AIE322, as referenced in `environment.py`).
 
-## Key Takeaway
-
-This project demonstrates how three different Reinforcement Learning paradigms solve the same sequential decision-making problem.
-
-For the implemented GridWorld, Q-Learning proved to be the most effective model-free approach, while Value Iteration provided a strong mathematical baseline. The project also connects theoretical concepts such as Bellman equations, Temporal Difference learning, and Policy Gradients with practical implementation.
-
-## Authors
-
-* Ahmed Mamdouh
-* Rewan Hany
-
-## Course
-
-Advanced Machine Learning
-
-## License
-
-This project is intended for educational and academic purposes.
+Team: Ahmed Mamdouh, Rewan Hany.
